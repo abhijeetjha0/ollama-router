@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Browser Automation Coverage Report</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background-color: #f5f5f5; color: #333; margin: 0; padding: 20px; }
+        .container { max-width: 1200px; margin: 0 auto; background: #fff; padding: 30px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        h1 { margin-top: 0; color: #1a1a1a; margin-bottom: 5px; }
+        .subtitle { color: #666; font-size: 1.1em; margin-bottom: 30px; border-bottom: 2px solid #eee; padding-bottom: 15px; }
+        .metrics { display: flex; gap: 20px; margin-bottom: 30px; }
+        .metric-card { background: #f8f9fa; border-left: 5px solid #28a745; padding: 15px 20px; border-radius: 4px; flex: 1; }
+        .metric-card.danger { border-left-color: #dc3545; }
+        .metric-value { font-size: 2em; font-weight: bold; margin: 5px 0; }
+        .metric-label { color: #666; font-size: 0.9em; text-transform: uppercase; letter-spacing: 1px; }
+        .coverage-bar-bg { background: #e9ecef; height: 20px; border-radius: 10px; overflow: hidden; margin-top: 10px; }
+        .coverage-bar-fill { background: #dc3545; height: 100%; width: {{COVERAGE_PERCENTAGE}}; }
+        
+        details { background: #f8f9fa; border: 1px solid #ddd; border-radius: 6px; margin-bottom: 15px; overflow: hidden; }
+        summary { font-weight: bold; font-size: 1.2em; padding: 15px 20px; background: #eef1f5; cursor: pointer; user-select: none; transition: background 0.2s; }
+        summary:hover { background: #e2e6ea; }
+        .details-content { padding: 20px; border-top: 1px solid #ddd; background: #fff; }
+        
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        th, td { text-align: left; padding: 12px; border-bottom: 1px solid #ddd; }
+        th { background-color: #f8f9fa; font-weight: 600; }
+        .status-touched { color: #28a745; font-weight: bold; }
+        .status-missed { color: #dc3545; }
+        
+        .timeline { list-style: none; padding: 0; margin: 20px 0 0 0; position: relative; }
+        .timeline-item { position: relative; padding-left: 50px; margin-bottom: 25px; }
+        .timeline-item::before { content: ''; position: absolute; left: 19px; top: 20px; bottom: -45px; width: 2px; background: #dee2e6; z-index: 0; }
+        .timeline-item:last-child { margin-bottom: 0; }
+        .timeline-item:last-child::before { display: none; }
+        .timeline-dot { position: absolute; left: 12px; top: 12px; width: 16px; height: 16px; border-radius: 50%; background: #007bff; outline: 4px solid #fff; z-index: 1; }
+        .timeline-dot.success { background: #28a745; }
+        .timeline-dot.info { background: #17a2b8; }
+        .timeline-content { background: #f8f9fa; padding: 15px; border-radius: 8px; border: 1px solid #e9ecef; }
+        .timeline-time { font-size: 0.85em; color: #888; margin-bottom: 5px; text-transform: uppercase; letter-spacing: 0.5px; }
+        .timeline-title { font-weight: bold; margin-bottom: 5px; color: #212529; font-size: 1.1em; }
+        .timeline-desc { color: #495057; font-size: 0.95em; line-height: 1.5; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Browser Automation Test Report: {{APP_NAME}}</h1>
+        <div class="subtitle">Target: {{TARGET_NAME}}</div>
+        
+        <div class="metrics">
+            <div class="metric-card danger">
+                <div class="metric-label">Code Coverage</div>
+                <div class="metric-value">{{COVERAGE_PERCENTAGE}}</div>
+                <div>{{COVERAGE_RATIO}} source files verified</div>
+                <div class="coverage-bar-bg">
+                    <div class="coverage-bar-fill"></div>
+                </div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">WCAG Accessibility</div>
+                <div class="metric-value">{{ACCESSIBILITY_STATUS}}</div>
+                <div>{{ACCESSIBILITY_SUMMARY}}</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">Performance Review</div>
+                <div class="metric-value">{{PERFORMANCE_METRIC}}</div>
+                <div>{{PERFORMANCE_SUMMARY}}</div>
+            </div>
+        </div>
+
+        <details open>
+            <summary>Code Coverage Analysis</summary>
+            <div class="details-content">
+                <p>This section details the static dependency trace of the tested route against all application files.</p>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>File Path</th>
+                            <th>Status</th>
+                            <th>Details</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <!-- INJECT_COVERAGE_ROWS -->
+                        <!-- EXAMPLE FORMAT:
+                        <tr>
+                            <td><code>app/page.js</code></td>
+                            <td class="status-touched">Tested</td>
+                            <td>Primary target. Fully navigated and interacted.</td>
+                        </tr>
+                        <tr>
+                            <td><code>app/components/navbar.js</code></td>
+                            <td class="status-missed">Missed</td>
+                            <td>Not visited during this test run.</td>
+                        </tr>
+                        -->
+                    </tbody>
+                </table>
+            </div>
+        </details>
+
+        <details>
+            <summary>Accessibility & Responsiveness</summary>
+            <div class="details-content">
+                <p>Detailed analysis of the application's usability and visual adherence across viewports.</p>
+                <ul style="line-height: 1.6; color: #444;">
+                    <!-- INJECT_ACCESSIBILITY_DETAILS -->
+                    <!-- EXAMPLE FORMAT:
+                    <li><strong>Semantic HTML:</strong> Verified presence of a single main <code>&lt;h1&gt;</code> element per page.</li>
+                    <li><strong>Keyboard Navigation:</strong> The <code>Tab</code> key correctly highlights interactive elements.</li>
+                    -->
+                </ul>
+            </div>
+        </details>
+
+        <details>
+            <summary>Performance Review</summary>
+            <div class="details-content">
+                <p>Metrics regarding the load times and rendering stability of the page.</p>
+                <ul style="line-height: 1.6; color: #444;">
+                    <!-- INJECT_PERFORMANCE_DETAILS -->
+                    <!-- EXAMPLE FORMAT:
+                    <li><strong>DOM Interactive:</strong> 222 ms (Excellent)</li>
+                    <li><strong>Total Load Time:</strong> ~1.5s (Including external requests)</li>
+                    -->
+                </ul>
+            </div>
+        </details>
+
+        <h2>Action Logs & Validation Pipeline</h2>
+        <ul class="timeline">
+            <!-- INJECT_TIMELINE_ITEMS -->
+            <!-- EXAMPLE FORMAT:
+            <li class="timeline-item">
+                <div class="timeline-dot info"></div>
+                <div class="timeline-content">
+                    <div class="timeline-time">Step 1</div>
+                    <div class="timeline-title">Initialize Target</div>
+                    <div class="timeline-desc">Navigated the browser to <code>http://localhost:3000/</code> and waited for the DOM to load.</div>
+                </div>
+            </li>
+            <li class="timeline-item">
+                <div class="timeline-dot success"></div>
+                <div class="timeline-content">
+                    <div class="timeline-time">Step 2</div>
+                    <div class="timeline-title">Component Interaction</div>
+                    <div class="timeline-desc">Clicked the hamburger menu on the mobile viewport successfully.</div>
+                </div>
+            </li>
+            -->
+        </ul>
+    </div>
+</body>
+</html>

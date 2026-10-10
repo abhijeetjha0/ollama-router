@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Ollama Router — Intelligent Model Routing for local LLMs." />
+    <title>Ollama Router — Intelligent Model Routing</title>
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
+  </head>
+  <body>
+    <div id="app">
+      <!-- Ambient background effects -->
+      <div class="ambient-bg">
+        <div class="ambient-orb ambient-orb--1"></div>
+        <div class="ambient-orb ambient-orb--2"></div>
+        <div class="ambient-orb ambient-orb--3"></div>
+      </div>
+
+      <!-- Top navigation bar -->
+      <header id="topbar" class="topbar">
+        <div class="topbar__left">
+          <div class="topbar__logo">
+            <span class="material-symbols-outlined topbar__logo-icon">alt_route</span>
+            <span class="topbar__title">ollama-router</span>
+          </div>
+        </div>
+        <div class="topbar__right">
+          <div id="ollama-status" class="status-badge status-badge--checking">
+            <span class="status-badge__dot"></span>
+            <span class="status-badge__text">Checking Ollama…</span>
+          </div>
+          <button id="btn-settings" class="topbar__btn" title="Settings">
+            <span class="material-symbols-outlined">settings</span>
+          </button>
+        </div>
+      </header>
+
+      <!-- Main layout: sidebar + chat -->
+      <main class="main-layout">
+        <!-- Sidebar -->
+        <aside id="sidebar" class="sidebar">
+          <!-- Tab switcher -->
+          <div class="sidebar__tabs">
+            <button class="sidebar__tab sidebar__tab--active" data-tab="conversations">
+              <span class="material-symbols-outlined">chat</span>
+              Chats
+            </button>
+            <button class="sidebar__tab" data-tab="routing">
+              <span class="material-symbols-outlined">alt_route</span>
+              Routes
+            </button>
+            <button class="sidebar__tab" data-tab="models">
+              <span class="material-symbols-outlined">smart_toy</span>
+              Models
+            </button>
+          </div>
+
+          <!-- Conversations panel -->
+          <div id="panel-conversations" class="sidebar__panel sidebar__panel--active">
+            <button id="btn-new-chat" class="btn btn--primary btn--full">
+              <span class="material-symbols-outlined">add</span>
+              New Chat
+            </button>
+            <div class="sidebar__search">
+              <div class="search-input-wrapper">
+                <span class="material-symbols-outlined">search</span>
+                <input id="chat-search-input" type="text" placeholder="Search chats semantically…" autocomplete="off" />
+                <button id="btn-clear-search" class="search-clear-btn" style="display:none;" title="Clear search">
+                  <span class="material-symbols-outlined">close</span>
+                </button>
+              </div>
+            </div>
+            <div id="conversation-list" class="conversation-list"></div>
+          </div>
+
+          <!-- Routing panel -->
+          <div id="panel-routing" class="sidebar__panel">
+            <div class="router-engine-card">
+              <div class="router-engine-card__header">
+                <div class="router-engine-card__title">
+                  <span class="material-symbols-outlined router-engine-card__icon" id="router-engine-icon">hub</span>
+                  <div>
+                    <div class="router-engine-card__name" id="router-engine-name">Vector Semantic</div>
+                    <div class="router-engine-card__sub" id="router-engine-model-label">embeddinggemma-2:latest</div>
+                  </div>
+                </div>
+                <span class="badge badge--success" id="router-engine-badge">Active</span>
+              </div>
+              <div class="router-engine-card__row">
+                <label for="routing-mode-select">Routing Mode:</label>
+                <select id="routing-mode-select" class="select select--sm">
+                  <option value="vector" selected>Vector Embeddings (Semantic)</option>
+                  <option value="systemone">System 1 Classifier (AI)</option>
+                  <option value="hybrid">Hybrid (Vector + System 1 + Keys)</option>
+                  <option value="keywords">Keywords Only</option>
+                </select>
+              </div>
+              <div class="router-engine-card__row" id="embedding-model-row">
+                <label for="embedding-model-select">Embedding Model:</label>
+                <select id="embedding-model-select" class="select select--sm"></select>
+              </div>
+              <div class="router-engine-card__row" id="router-model-row">
+                <label for="router-model-select">Decision Model:</label>
+                <select id="router-model-select" class="select select--sm"></select>
+              </div>
+            </div>
+
+            <!-- Guardrails Card -->
+            <div class="guardrails-card">
+              <div class="guardrails-card__header">
+                <div class="guardrails-card__title">
+                  <span class="material-symbols-outlined guardrails-card__icon">shield</span>
+                  <div>
+                    <div class="guardrails-card__name">Semantic Guardrails</div>
+                    <div class="guardrails-card__sub">Prompt Injection & Threat Filter</div>
+                  </div>
+                </div>
+                <label class="switch" title="Toggle Guardrails">
+                  <input id="guardrails-toggle" type="checkbox" checked />
+                  <span class="slider"></span>
+                </label>
+              </div>
+            </div>
+
+            <div class="panel-header">
+              <h3>Routing Rules</h3>
+              <button id="btn-add-route" class="btn btn--sm btn--ghost">
+                <span class="material-symbols-outlined">add</span>
+                Add
+              </button>
+            </div>
+            <div id="routing-rules-list" class="routing-rules-list"></div>
+            <div class="panel-footer">
+              <div class="default-model-select">
+                <label for="default-model">Default Chat Model (fallback):</label>
+                <select id="default-model" class="select"></select>
+              </div>
+            </div>
+          </div>
+
+          <!-- Models panel -->
+          <div id="panel-models" class="sidebar__panel">
+            <div class="panel-header">
+              <h3>Available Models</h3>
+              <button id="btn-refresh-models" class="btn btn--sm btn--ghost" title="Refresh models">
+                <span class="material-symbols-outlined">refresh</span>
+              </button>
+            </div>
+            <div id="models-list" class="models-list"></div>
+          </div>
+        </aside>
+
+        <!-- Chat area -->
+        <section class="chat-area">
+          <!-- Chat header -->
+          <div id="chat-header" class="chat-header">
+            <div class="chat-header__info">
+              <h2 id="chat-title" class="chat-header__title">New Conversation</h2>
+              <span id="chat-route-badge" class="route-badge route-badge--hidden"></span>
+            </div>
+            <div class="chat-header__actions">
+              <div id="metrics-bar" class="metrics-bar">
+                <div class="metric" title="Response time">
+                  <span class="material-symbols-outlined">schedule</span>
+                  <span id="metric-time">—</span>
+                </div>
+                <div class="metric" title="Tokens used">
+                  <span class="material-symbols-outlined">token</span>
+                  <span id="metric-tokens">—</span>
+                </div>
+                <div class="metric" title="Model used">
+                  <span class="material-symbols-outlined">smart_toy</span>
+                  <span id="metric-model">—</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Messages area -->
+          <div id="messages-container" class="messages-container">
+            <div id="messages" class="messages">
+              <!-- Welcome state -->
+              <div id="welcome-state" class="welcome-state">
+                <div class="welcome-state__icon">
+                  <span class="material-symbols-outlined" style="font-size: 28px;">alt_route</span>
+                </div>
+                <h2>Ready to Route</h2>
+                <p>Your queries will be automatically routed to the best model based on your routing rules. Configure routes in the sidebar, then start chatting.</p>
+                <div class="welcome-state__chips">
+                  <button class="chip" data-prompt="Write a Python function to sort a list">💻 Code task</button>
+                  <button class="chip" data-prompt="Write a haiku about the ocean at midnight">✨ Creative writing</button>
+                  <button class="chip" data-prompt="Explain quantum entanglement in simple terms">🧠 General knowledge</button>
+                  <button class="chip" data-prompt="Analyze the pros and cons of microservices vs monolith">📊 Analysis</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Input area -->
+          <div class="input-area" id="input-area-zone">
+            <!-- Drop-in Document Context (Mini-RAG) & Multimodal Images (Vision) -->
+            <div id="attached-images-container" class="attached-images-container" style="display:none;"></div>
+            <div id="attached-docs-container" class="attached-docs-container" style="display:none;"></div>
+            <div id="drag-drop-overlay" class="drag-drop-overlay" style="display:none;">
+              <span style="display: inline-flex; align-items: center; gap: 8px;">
+                <span class="material-symbols-outlined">upload_file</span>
+                Drop files (PDF, JSON, Docs for RAG, or Images for Vision)
+              </span>
+            </div>
+
+            <div class="input-area__wrapper">
+              <input type="file" id="file-input" style="display:none;" accept="*/*" multiple />
+              <button id="btn-attach-file" class="input-area__attach" title="Attach files (PDF, JSON, Docs, Code, or Images)">
+                <span class="material-symbols-outlined">attach_file</span>
+              </button>
+              <textarea id="chat-input" class="input-area__textarea" placeholder="Type your message… (queries are auto-routed)" rows="1"></textarea>
+              <button id="btn-send" class="input-area__send" title="Send message" disabled>
+                <span class="material-symbols-outlined">send</span>
+              </button>
+            </div>
+            <div class="input-area__footer">
+              <span id="routing-indicator" class="routing-indicator">
+                <span class="routing-indicator__dot"></span>
+                Route: <strong id="routing-indicator-model">auto</strong>
+              </span>
+            </div>
+          </div>
+        </section>
+      </main>
+
+      <!-- Settings Modal -->
+      <dialog id="settings-modal" class="modal">
+        <div class="modal__content">
+          <div class="modal__header">
+            <h2>Settings</h2>
+            <button id="btn-close-settings" class="modal__close" title="Close settings">
+              <span class="material-symbols-outlined">close</span>
+            </button>
+          </div>
+          <div class="modal__body">
+            <div class="setting-group">
+              <label for="ollama-url">Ollama Base URL</label>
+              <input id="ollama-url" type="url" class="input" value="http://localhost:11434" />
+            </div>
+            <div class="setting-group">
+              <label for="system-prompt">Default System Prompt</label>
+              <textarea id="system-prompt" class="input input--textarea" rows="4" placeholder="You are a helpful assistant.">You are a helpful assistant. Provide clear, concise, and accurate responses.</textarea>
+            </div>
+            <div class="setting-group">
+              <label for="temperature">Temperature: <span id="temp-value">0.7</span></label>
+              <input id="temperature" type="range" class="range" min="0" max="2" step="0.1" value="0.7" />
+            </div>
+            <div class="setting-group">
+              <label>
+                <input id="stream-toggle" type="checkbox" class="toggle" checked />
+                Enable streaming responses
+              </label>
+            </div>
+          </div>
+          <div class="modal__footer">
+            <button id="btn-save-settings" class="btn btn--primary">Save Settings</button>
+          </div>
+        </div>
+      </dialog>
+
+      <!-- Add Route Modal -->
+      <dialog id="route-modal" class="modal">
+        <div class="modal__content modal__content--sm">
+          <div class="modal__header">
+            <h2 id="route-modal-title">Add Routing Rule</h2>
+            <button id="btn-close-route" class="modal__close" title="Close modal">
+              <span class="material-symbols-outlined">close</span>
+            </button>
+          </div>
+          <div class="modal__body">
+            <div class="setting-group">
+              <label for="route-category">Category Name</label>
+              <input id="route-category" type="text" class="input" placeholder="e.g., code, creative, math" />
+            </div>
+            <div class="setting-group">
+              <label for="route-desc">Category Description <span class="hint">(used by Vector & Semantic AI)</span></label>
+              <textarea id="route-desc" class="input input--textarea" rows="2" placeholder="e.g., Programming, syntax, debugging, algorithms, and software development"></textarea>
+              <div id="route-overlap-alert" class="route-overlap-alert" style="display: none;"></div>
+            </div>
+            <div class="setting-group">
+              <label for="route-keywords">Keywords <span class="hint">(comma-separated fallback)</span></label>
+              <input id="route-keywords" type="text" class="input" placeholder="e.g., python, javascript, function, bug, code" />
+            </div>
+            <div class="setting-group">
+              <label for="route-model">Route to Chat Model</label>
+              <select id="route-model" class="select"></select>
+            </div>
+            <div class="setting-group">
+              <label for="route-color">Badge Color</label>
+              <div class="color-picker">
+                <button class="color-swatch color-swatch--active" data-color="#6366f1" style="background:#6366f1"></button>
+                <button class="color-swatch" data-color="#ec4899" style="background:#ec4899"></button>
+                <button class="color-swatch" data-color="#10b981" style="background:#10b981"></button>
+                <button class="color-swatch" data-color="#f59e0b" style="background:#f59e0b"></button>
+                <button class="color-swatch" data-color="#ef4444" style="background:#ef4444"></button>
+                <button class="color-swatch" data-color="#06b6d4" style="background:#06b6d4"></button>
+                <button class="color-swatch" data-color="#8b5cf6" style="background:#8b5cf6"></button>
+                <button class="color-swatch" data-color="#f97316" style="background:#f97316"></button>
+              </div>
+            </div>
+          </div>
+          <div class="modal__footer">
+            <button id="btn-cancel-route" class="btn btn--ghost">Cancel</button>
+            <button id="btn-save-route" class="btn btn--primary">Save Rule</button>
+          </div>
+        </div>
+      </dialog>
+    </div>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
