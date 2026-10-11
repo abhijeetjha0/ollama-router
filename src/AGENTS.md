@@ -3,10 +3,17 @@
 ## Purpose
 The `src/` directory contains all client-side application logic, multi-engine routing implementations, state management, Mini-RAG document pipelines, Ollama API communications, and retro-terminal UI views.
 
-## Key Files
-| File | Role |
+## Key Files & Directories
+| File/Dir | Role |
 |---|---|
-| `main.js` | UI controller & orchestrator; handles DOM event delegation, drag-drop/paste file ingestion, message streaming, and route preview. |
+| `App.jsx` | Top-level cockpit layout container (topbar, layout grid, modals). |
+| `main.jsx` | React DOM entry point wrapping App in `StoreProvider`. |
+| `components/Sidebar/` | Sidebar modules (`Sidebar`, `ConversationsTab`, `RoutingTab`, `ModelsTab`, `StatusBadge`, `RouteCard`, `ConversationItem`). |
+| `components/Chat/` | Cockpit chat view (`ChatArea`, `ChatHeader`, `MessageList`, `MessageItem`, `ChatInput`, `AttachmentBar`, `WelcomeState`). |
+| `components/Modals/` | Route configuration modal (`RouteModal`) and cockpit settings (`SettingsModal`). |
+| `components/Common/` | Reusable UI primitives (`Modal`). |
+| `context/StoreContext.jsx` | React Context and `useStore` hook providing declarative access to `store.js`. |
+| `hooks/` | Custom hooks (`useOllama`, `useRoutingPreview`, `useFileDrop`). |
 | `router.js` | Multi-engine router; implements `quickRoute`, `route`, `routeMultimodal`, `checkGuardrails`, `routeBySystemOne`, `routeByVector`, `routeByKeywords`. |
 | `store.js` | Centralized state store (`Store`); manages pub/sub events (`on`, `emit`) and syncs state with `localStorage`. |
 | `ollama.js` | API client (`OllamaClient`); handles `/api/tags`, `/api/chat` (streaming/sync), `/api/embed`, `/v1/systemone`, and message sanitization. |
@@ -20,13 +27,13 @@ The `src/` directory contains all client-side application logic, multi-engine ro
 ### 1. Multimodal & Vision Rules
 - When images are attached, `router.routeMultimodal(query)` filters candidates strictly to vision models (`isVisionModel`).
 - If multiple vision routes or models exist, it scores `query` text against vision rules (e.g., `vision-ocr` vs. `vision-art`) instead of hardcoding a single model.
-- **Critical Invariant**: Never send `{ images: [...] }` to text/code models. In `ollama.js` and `main.js`, `sanitizeMessages(model, messages)` strips image binaries from conversation history when targeting non-vision models to prevent Ollama `400 invalid_request_error`.
+- **Critical Invariant**: Never send `{ images: [...] }` to text/code models. Image binaries are stripped from conversation history when targeting non-vision models to prevent Ollama `400 invalid_request_error`.
 
 ### 2. Decision Routing Cascades
 - **Guardrails First**: Check semantic prompt injection/jailbreak guardrails before dispatching.
 - **Fast Preview**: `router.quickRoute(text)` must execute synchronously for instant keystroke feedback.
 - **Deep Routing**: `router.route(text)` runs asynchronously using System 1 fast decisioning (`/v1/systemone`) or Dense Vector embeddings (`/api/embed`).
-- **Safe Fallback**: Always verify candidate models with `m.isChatModel`. Never allow decision encoders or embedding generators as completion targets.
+- **Safe Fallback**: Always verify candidate models with `m.isChatModel && !m.isFunctionModel`. Never allow decision encoders, embedding generators, or tool/function models as chat completion targets.
 
 ### 3. Mini-RAG & Embedding Guardrails
 - **Chunk Batching**: Always batch document embedding requests in groups of 10 chunks (`BATCH_SIZE = 10`) in `rag.js` to avoid payload exhaustion and server timeouts.
@@ -58,12 +65,16 @@ store.update({ routingMode: 'vector' });
 ```javascript
 import { retrieveRelevantChunks, formatRAGContext } from './rag.js';
 
-const relevantChunks = await retrieveRelevantChunks(
-  content,
-  store.state.activeDocuments,
-  store.state.embeddingModel || 'embeddinggemma-2:latest',
-  3,
-  0.32
-);
-const ragSystemPrompt = formatRAGContext(relevantChunks);
+// Only attempt RAG retrieval if an embedding model is configured
+const embeddingModel = store.state.embeddingModel;
+if (embeddingModel && store.state.activeDocuments.length > 0) {
+  const relevantChunks = await retrieveRelevantChunks(
+    content,
+    store.state.activeDocuments,
+    embeddingModel,
+    3,
+    0.32
+  );
+  const ragSystemPrompt = formatRAGContext(relevantChunks);
+}
 ```

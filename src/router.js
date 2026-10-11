@@ -34,8 +34,7 @@ class Router {
         !m.isDecisionModel &&
         !m.isEmbeddingModel &&
         !m.name.toLowerCase().includes('decision') && 
-        !m.name.toLowerCase().includes('embedding') &&
-        !m.name.toLowerCase().includes('laya')
+        !m.name.toLowerCase().includes('embedding')
       );
       return store.state.defaultModel || candidates[0]?.name || '';
     }
@@ -180,7 +179,7 @@ class Router {
   async route(query) {
     const mode = store.state.routingMode || 'vector';
     const routerModel = store.state.routerModel || '';
-    const embeddingModel = store.state.embeddingModel || 'embeddinggemma-2:latest';
+    const embeddingModel = store.state.embeddingModel || '';
 
     // 0. Check for attached images (Multimodal / Vision Task)
     const activeImages = store.state.activeImages || [];
@@ -192,8 +191,8 @@ class Router {
       };
     }
 
-    // 1. Check Semantic Guardrails first (if enabled)
-    if (store.state.guardrailsEnabled && query && query.trim().length > 3) {
+    // 1. Check Semantic Guardrails first (if enabled and embedding model available)
+    if (store.state.guardrailsEnabled && embeddingModel && query && query.trim().length > 3) {
       try {
         const guardMatch = await this.checkGuardrails(query, embeddingModel);
         if (guardMatch && guardMatch.action === 'block') {
@@ -213,8 +212,12 @@ class Router {
       }
     }
 
-    // 2. Vector Semantic Mode
+    // 2. Vector Semantic Mode — requires an embedding model
     if (mode === 'vector') {
+      if (!embeddingModel) {
+        console.warn('No embedding model configured, falling back to keywords.');
+        return this.routeByKeywords(query);
+      }
       try {
         const vectorDecision = await this.routeByVector(query, embeddingModel);
         if (vectorDecision) return vectorDecision;
@@ -224,8 +227,12 @@ class Router {
       return this.routeByKeywords(query);
     }
 
-    // 3. System 1 Decision Mode
+    // 3. System 1 Decision Mode — requires a decision/router model
     if (mode === 'systemone' || mode === 'laya') {
+      if (!routerModel) {
+        console.warn('No decision model configured, falling back to keywords.');
+        return this.routeByKeywords(query);
+      }
       try {
         const sys1Decision = await this.routeBySystemOne(query, routerModel);
         if (sys1Decision) return sys1Decision;
@@ -237,17 +244,19 @@ class Router {
 
     // 4. Hybrid Mode (Vector -> System 1 -> Keywords)
     if (mode === 'hybrid') {
-      // Try Vector first
-      try {
-        const vectorDecision = await this.routeByVector(query, embeddingModel);
-        if (vectorDecision && vectorDecision.confidence >= 40) {
-          return vectorDecision;
+      // Try Vector first (only if embedding model is available)
+      if (embeddingModel) {
+        try {
+          const vectorDecision = await this.routeByVector(query, embeddingModel);
+          if (vectorDecision && vectorDecision.confidence >= 40) {
+            return vectorDecision;
+          }
+        } catch {
+          // Continue
         }
-      } catch {
-        // Continue
       }
 
-      // Try System 1 second if configured
+      // Try System 1 second (only if decision model is configured)
       if (routerModel) {
         try {
           const sys1Decision = await this.routeBySystemOne(query, routerModel);
@@ -275,6 +284,7 @@ class Router {
    * @returns {Promise<object|null>}
    */
   async routeByVector(query, embeddingModel) {
+    if (!embeddingModel) return null;
     const routes = store.state.routes.filter(r => r.category);
     if (routes.length === 0) return null;
 
@@ -363,9 +373,12 @@ class Router {
     const fallbackChatModel = this.getFallbackChatModel();
 
     // Prepare criteria mapping from active routes
+    // Ensure descriptions are concise to stay strictly under the 176-token budget of Ollama System 1 / Laya
     const criteria = {};
     for (const r of routes) {
-      criteria[r.category] = r.description || r.keywords.slice(0, 10).join(', ');
+      const rawText = r.description || (r.keywords || []).slice(0, 8).join(', ');
+      const concise = rawText.split(/\s+/).slice(0, 16).join(' ');
+      criteria[r.category] = concise;
     }
 
     const startTime = performance.now();
@@ -424,7 +437,31 @@ class Router {
     const routes = store.state.routes;
     const fallbackModel = this.getFallbackChatModel();
     const chatModels = this.getChatModels();
-    const queryLower = query.toLowerCase();
+    const queryLower = query.toLowerCase().trim();
+
+    // Direct arithmetic / math calculation detection (e.g. "2+2", "15 * 3", "100 / 4", "5 + 5 = ?")
+    const isArithmetic = /^\s*[-+]?\d+(\s*[-+*/^%=]\s*[-+]?\d+)+(\s*=\s*\?)?\s*$/.test(queryLower) ||
+                         /^\s*(\d+\s*[-+*/^%]\s*)+\d+\s*$/.test(queryLower) ||
+                         /^\s*[-+]?\d+\s*[-+*/]\s*[-+]?\d+\s*$/.test(queryLower);
+    if (isArithmetic) {
+      const mathRoute = routes.find(r => r.category === 'math');
+      if (mathRoute) {
+        let targetModel = mathRoute.model;
+        if (!targetModel || (chatModels.length > 0 && !chatModels.some(m => m.name === targetModel))) {
+          targetModel = fallbackModel;
+        }
+        return {
+          model: targetModel,
+          category: mathRoute.category,
+          color: mathRoute.color || '#10b981',
+          confidence: 90,
+          engine: 'keywords',
+          score: 10,
+          explanation: `🏷️ Arithmetic match: "${mathRoute.category}" (90%) → ${targetModel}`,
+        };
+      }
+    }
+
     const queryWords = queryLower.split(/\s+/).map(w => w.replace(/[^a-z0-9+#]/g, ''));
 
     let bestMatch = null;
@@ -496,6 +533,7 @@ class Router {
    * @returns {Promise<{ triggered: boolean, guardrail: object, score: number, action: string, latencyMs: number }|null>}
    */
   async checkGuardrails(query, embeddingModel) {
+    if (!embeddingModel) return null;
     const guardrails = store.state.guardrails || [];
     if (guardrails.length === 0) return null;
 
@@ -549,7 +587,7 @@ class Router {
    * @returns {Promise<Array<{ category: string, color: string, similarity: number }>>}
    */
   async checkRouteOverlap(candidateDesc, existingRoutes, currentRouteId, embeddingModel) {
-    if (!candidateDesc || candidateDesc.trim().length < 5) return [];
+    if (!embeddingModel || !candidateDesc || candidateDesc.trim().length < 5) return [];
 
     let candEmbedding = embeddingCache.get(embeddingModel, candidateDesc);
     if (!candEmbedding) {

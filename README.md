@@ -3,7 +3,7 @@
 > **Intelligent, zero-backend model routing cockpit for local LLMs powered by Ollama.**
 
 ![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)
-![Runtime: Vanilla JS](https://img.shields.io/badge/Runtime-Vanilla%20JS%20(ES%20Modules)-yellow.svg)
+![Runtime: React 19](https://img.shields.io/badge/Runtime-React%2019-blue.svg)
 ![Bundler: Vite 8](https://img.shields.io/badge/Bundler-Vite%208-purple.svg)
 ![Backend: Zero Backend](https://img.shields.io/badge/Architecture-Zero--Backend%20Client-green.svg)
 ![Ollama](https://img.shields.io/badge/Engine-Ollama%20Local-black.svg)
@@ -15,10 +15,11 @@
 ## 🌟 Key Features
 
 ### 🧠 Multi-Engine Decision Routing
-* **Vector Semantic Routing**: High-accuracy cosine similarity matching against route descriptions using `embeddinggemma-2:latest` dense embeddings.
-* **System 1 Decision Models**: Fast encoder classification via `/v1/systemone` to categorize query intent with confidence scores.
-* **Lexical Heuristics**: Instant keystroke preview as you type using keyword matching.
+* **Vector Semantic Routing**: High-accuracy cosine similarity matching against route descriptions using dense embeddings (e.g., `nomic-embed-text`, `embeddinggemma-2`).
+* **System 1 Decision Models**: Fast encoder classification via `/v1/systemone` (e.g., `laya`) to categorize query intent with confidence scores and real-time probability distribution breakdown.
+* **Lexical Heuristics**: Instant keystroke preview as you type using keyword and pattern matching (including arithmetic expressions like `2+2`).
 * **Hybrid Cascade**: Combines Guardrails $\rightarrow$ Vector Embeddings / Decision Encoders $\rightarrow$ Lexical Keywords $\rightarrow$ Safe Fallback.
+* **Model Agnostic & Auto-Discovered**: No hardcoded models. Select any installed chat, decision, or embedding model from the Models cockpit. Gracefully degrades when embeddings or decision models are absent.
 
 ### 👁️ Prompt-Aware Multimodal Vision Routing
 * **Drag-and-Drop & Clipboard Paste (`Cmd+V`)**: Upload images directly into the chat cockpit.
@@ -50,7 +51,7 @@
 * [Ollama](https://ollama.com/) running locally (`http://localhost:11434`)
 
 ### 2. Recommended Local Models
-Pull the recommended models in Ollama:
+Pull any models you wish to use in Ollama (auto-discovered on startup):
 
 ```bash
 # Chat & Code specialist
@@ -61,6 +62,9 @@ ollama pull qwen3-vl:2b
 
 # Dense Vector Embedding model (for Semantic Routing & Mini-RAG)
 ollama pull embeddinggemma-2:latest
+
+# Fast System 1 Decision classifier (optional)
+ollama pull laya:latest
 ```
 
 ### 3. Install & Run
@@ -87,7 +91,15 @@ ollama-router/
 ├── AGENTS.md                  # High-level agent orchestration guidelines
 ├── src/
 │   ├── AGENTS.md              # Folder-scoped source architecture rules
-│   ├── main.js                # UI controller, event delegation, streaming renderer
+│   ├── App.jsx                # Root cockpit layout & active view coordination
+│   ├── main.jsx               # React 19 entry point & DOM root mounting
+│   ├── components/            # Modular React components
+│   │   ├── Common/            # Modal dialogs & reusable UI
+│   │   ├── Sidebar/           # Navigation tabs, Route cards, Model selectors
+│   │   ├── Chat/              # Header, MessageList, ChatInput, AttachmentBar
+│   │   └── Modals/            # Route editor (live overlap check), Settings
+│   ├── context/               # Reactive StoreContext & useStore hook
+│   ├── hooks/                 # Custom React hooks (useOllama, useRoutingPreview, useFileDrop)
 │   ├── router.js              # Multi-engine decision routing & multimodal handler
 │   ├── store.js               # Centralized pub/sub state manager (localStorage sync)
 │   ├── ollama.js              # Ollama API client & multimodal payload sanitization
@@ -95,9 +107,9 @@ ollama-router/
 │   ├── vector.js              # Cosine similarity math, text chunking & LRU cache
 │   ├── utils.js               # Formatting helpers & markdown parser
 │   └── style.css              # Terminal cockpit design system
-├── index.html                 # Single-page cockpit shell
-├── vite.config.js             # Vite 8 reverse-proxy configuration
-├── package.json               # Project manifest
+├── index.html                 # Single-page cockpit shell (#root mount)
+├── vite.config.js             # Vite 8 + React plugin reverse-proxy configuration
+├── package.json               # Project manifest (React 19, Vite 8)
 └── LICENSE                    # MIT License
 ```
 

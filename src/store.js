@@ -6,12 +6,11 @@
 
 const STORAGE_KEY = 'ollama-router';
 
-/** Default routing rules */
 export const DEFAULT_ROUTES = [
   {
     id: 'route-code',
     category: 'code',
-    description: 'Programming, coding, syntax, debugging, algorithms, and software development tasks',
+    description: 'Writing software code, programming languages, debugging scripts, algorithms',
     keywords: ['code', 'function', 'bug', 'error', 'python', 'javascript', 'typescript', 'rust', 'java', 'api', 'debug', 'refactor', 'algorithm', 'class', 'compile', 'import', 'variable', 'loop', 'array', 'html', 'css', 'sql', 'git', 'docker', 'deploy'],
     model: '',
     color: '#6366f1',
@@ -19,7 +18,7 @@ export const DEFAULT_ROUTES = [
   {
     id: 'route-creative',
     category: 'creative',
-    description: 'Creative writing, storytelling, poetry, essays, dialogue, and imaginative narratives',
+    description: 'Creative writing, storytelling, poetry, essays, humor, and roleplay',
     keywords: ['write', 'story', 'poem', 'haiku', 'creative', 'fiction', 'essay', 'blog', 'letter', 'script', 'dialogue', 'narrative', 'lyric', 'novel', 'character'],
     model: '',
     color: '#ec4899',
@@ -27,15 +26,15 @@ export const DEFAULT_ROUTES = [
   {
     id: 'route-math',
     category: 'math',
-    description: 'Mathematics, calculations, equations, formulas, calculus, probability, and statistics',
-    keywords: ['math', 'calculate', 'equation', 'formula', 'integral', 'derivative', 'statistics', 'probability', 'algebra', 'geometry', 'calculus', 'matrix', 'solve'],
+    description: 'Mathematics, arithmetic, calculations, numbers, equations, and math problems',
+    keywords: ['math', 'calculate', 'calc', 'arithmetic', 'equation', 'formula', 'integral', 'derivative', 'statistics', 'probability', 'algebra', 'geometry', 'calculus', 'matrix', 'solve', 'addition', 'subtraction', 'multiplication', 'division', '2+2'],
     model: '',
     color: '#10b981',
   },
   {
     id: 'route-analysis',
     category: 'analysis',
-    description: 'Comparative evaluation, analyzing pros and cons, logical trade-offs, and structured reviews',
+    description: 'Comparative analysis, evaluating pros and cons, logical trade-offs',
     keywords: ['analyze', 'compare', 'pros', 'cons', 'tradeoff', 'evaluate', 'review', 'assess', 'benchmark', 'versus', 'difference', 'advantage', 'disadvantage'],
     model: '',
     color: '#f59e0b',
@@ -43,7 +42,7 @@ export const DEFAULT_ROUTES = [
   {
     id: 'route-vision',
     category: 'vision',
-    description: 'Visual analysis, image description, diagram understanding, OCR, charts, screenshots, and multimodal tasks',
+    description: 'Visual image understanding, photos, diagrams, OCR, charts, and screenshots',
     keywords: ['image', 'photo', 'picture', 'diagram', 'chart', 'screenshot', 'draw', 'look', 'see', 'ocr', 'visual', 'figure', 'graph'],
     model: '',
     color: '#06b6d4',
@@ -87,7 +86,7 @@ function getInitialState() {
     routes: [...DEFAULT_ROUTES],
     defaultModel: '',
     routerModel: '',
-    embeddingModel: 'embeddinggemma-2:latest',
+    embeddingModel: '',  // Auto-detected or user-selected; no hardcoded default
     routingMode: 'vector', // 'vector' | 'systemone' | 'hybrid' | 'keywords'
 
     // Semantic Guardrails
@@ -355,8 +354,17 @@ class Store {
           this._state.routes = [...data.routes];
           // Ensure all default routes (e.g. route-vision) exist even if older state was saved
           for (const defRoute of DEFAULT_ROUTES) {
-            if (!this._state.routes.some(r => r.id === defRoute.id || r.category.toLowerCase() === defRoute.category.toLowerCase())) {
+            const existing = this._state.routes.find(r => r.id === defRoute.id || r.category.toLowerCase() === defRoute.category.toLowerCase());
+            if (!existing) {
               this._state.routes.push(JSON.parse(JSON.stringify(defRoute)));
+            } else {
+              // Upgrade legacy math description and keywords so calculations & arithmetic route accurately
+              if (defRoute.category === 'math' && !existing.description.toLowerCase().includes('arithmetic')) {
+                existing.description = defRoute.description;
+                if (!existing.keywords.includes('2+2')) {
+                  existing.keywords.push('2+2', 'arithmetic', 'calc', 'addition', 'subtraction', 'multiplication', 'division');
+                }
+              }
             }
           }
         } else {
@@ -366,23 +374,20 @@ class Store {
         if (data.routerModel) this._state.routerModel = data.routerModel;
         if (data.embeddingModel) this._state.embeddingModel = data.embeddingModel;
         if (data.routingMode) {
-          this._state.routingMode = data.routingMode === 'laya' ? 'vector' : data.routingMode;
-        }
-        if (this._state.routerModel && this._state.routerModel.toLowerCase().includes('laya')) {
-          this._state.routerModel = '';
+          this._state.routingMode = data.routingMode === 'laya' ? 'systemone' : data.routingMode;
         }
         if (data.guardrailsEnabled !== undefined) this._state.guardrailsEnabled = data.guardrailsEnabled;
         if (data.guardrails) this._state.guardrails = data.guardrails;
         if (data.activeDocuments) this._state.activeDocuments = data.activeDocuments;
         if (data.settings) Object.assign(this._state.settings, data.settings);
 
-        // Sanitize: ensure non-chat models (like decision encoders or embedding models) are not targets for chat
-        if (this._state.defaultModel && (this._state.defaultModel.toLowerCase().includes('laya') || this._state.defaultModel.toLowerCase().includes('decision') || this._state.defaultModel.toLowerCase().includes('embedding'))) {
+        // Sanitize: ensure non-chat models (like decision encoders or embedding models) are not targets for chat completions
+        if (this._state.defaultModel && (this._state.defaultModel.toLowerCase().includes('decision') || this._state.defaultModel.toLowerCase().includes('embedding') || this._state.defaultModel.toLowerCase().includes('laya'))) {
           this._state.defaultModel = '';
         }
         if (Array.isArray(this._state.routes)) {
           this._state.routes.forEach(r => {
-            if (r.model && (r.model.toLowerCase().includes('laya') || r.model.toLowerCase().includes('decision') || r.model.toLowerCase().includes('embedding'))) {
+            if (r.model && (r.model.toLowerCase().includes('decision') || r.model.toLowerCase().includes('embedding') || r.model.toLowerCase().includes('laya'))) {
               r.model = '';
             }
           });

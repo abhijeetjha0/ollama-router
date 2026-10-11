@@ -44,7 +44,43 @@ class OllamaClient {
   }
 
   /**
-   * List all locally available models.
+   * Infer creator or developer organization from model name and family.
+   * @param {string} name
+   * @param {string} family
+   * @returns {string}
+   */
+  inferDeveloper(name, family) {
+    const s = `${name} ${family || ''}`.toLowerCase();
+    if (s.includes('qwen')) return 'Alibaba';
+    if (s.includes('gemma')) return 'Google';
+    if (s.includes('laya')) return 'Laya';
+    if (s.includes('nomic')) return 'Nomic AI';
+    if (s.includes('llama')) return 'Meta';
+    if (s.includes('mistral') || s.includes('mixtral')) return 'Mistral AI';
+    if (s.includes('phi')) return 'Microsoft';
+    if (s.includes('deepseek')) return 'DeepSeek';
+    if (s.includes('minicpm')) return 'OpenBMB';
+    if (s.includes('moondream')) return 'Vikhyat';
+    return '';
+  }
+
+  /**
+   * Format context token window to human readable representation.
+   * @param {number|null} tokens
+   * @returns {string}
+   */
+  formatContextTokens(tokens) {
+    if (!tokens || typeof tokens !== 'number') return '';
+    if (tokens >= 1024) {
+      const k = Math.round(tokens / 1024);
+      return `${k}k ctx`;
+    }
+    return `${tokens} ctx`;
+  }
+
+  /**
+   * List all locally available models with rich metadata.
+   * Enriches models (including MLX/safetensors) by querying /api/show when details are missing.
    * @returns {Promise<Array>}
    */
   async listModels() {
@@ -54,43 +90,111 @@ class OllamaClient {
       });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const data = await response.json();
-      return (data.models || []).map(model => {
-        const nameLower = model.name.toLowerCase();
-        const families = Array.isArray(model.details?.families) ? model.details.families : [];
-        const capabilities = Array.isArray(model.details?.capabilities) ? model.details.capabilities : [];
-        const isDecision = capabilities.includes('decision') || nameLower.includes('decision') || nameLower.includes('systemone') || nameLower.includes('laya');
-        const isEmbedding = capabilities.includes('embedding') || nameLower.includes('embed') || families.includes('bert') || families.includes('nomic-bert');
-        const isVision = families.some(f => f.toLowerCase().includes('clip')) ||
-          nameLower.includes('-vl') ||
-          nameLower.includes(':vl') ||
-          nameLower.includes('vision') ||
-          nameLower.includes('llava') ||
-          nameLower.includes('bakllava') ||
-          nameLower.includes('minicpm-v') ||
-          nameLower.includes('moondream');
-        const isChat = capabilities.includes('completion') || (!isDecision && !isEmbedding);
+      const rawModels = data.models || [];
 
-        const derivedCapabilities = [...capabilities];
-        if (isChat && !derivedCapabilities.includes('completion')) derivedCapabilities.push('completion');
-        if (isEmbedding && !derivedCapabilities.includes('embedding')) derivedCapabilities.push('embedding');
-        if (isVision && !derivedCapabilities.includes('vision')) derivedCapabilities.push('vision');
-        if (isDecision && !derivedCapabilities.includes('decision')) derivedCapabilities.push('decision');
+      return await Promise.all(
+        rawModels.map(async (model) => {
+          let showData = null;
+          const isMlx = model.details?.runner === 'mlx' || model.details?.format === 'safetensors' || model.name.toLowerCase().includes('mlx');
+          const isMissingMeta = !model.details?.parameter_size || !model.details?.family || !model.details?.context_length;
 
-        return {
-          name: model.name,
-          size: model.size,
-          digest: model.digest?.slice(0, 12),
-          modifiedAt: model.modified_at,
-          family: model.details?.family || 'unknown',
-          parameterSize: model.details?.parameter_size || '—',
-          quantization: model.details?.quantization_level || '—',
-          capabilities: derivedCapabilities,
-          isDecisionModel: isDecision,
-          isChatModel: isChat,
-          isEmbeddingModel: isEmbedding,
-          isVisionModel: isVision,
-        };
-      });
+          if (isMlx || isMissingMeta) {
+            try {
+              const showRes = await fetch(`${this.baseUrl}/api/show`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: model.name }),
+                signal: AbortSignal.timeout(3000),
+              });
+              if (showRes.ok) {
+                showData = await showRes.json();
+              }
+            } catch {
+              // Graceful fallback to raw tag metadata
+            }
+          }
+
+          const nameLower = model.name.toLowerCase();
+          const families = Array.isArray(model.details?.families)
+            ? model.details.families
+            : (Array.isArray(showData?.details?.families) ? showData.details.families : []);
+          const capabilities = Array.isArray(model.details?.capabilities)
+            ? model.details.capabilities
+            : (Array.isArray(showData?.capabilities) ? showData.capabilities : []);
+
+          const isDecision = capabilities.includes('decision') || nameLower.includes('decision') || nameLower.includes('systemone') || nameLower.includes('laya');
+          const isEmbedding = capabilities.includes('embedding') || nameLower.includes('embed') || families.includes('bert') || families.includes('nomic-bert');
+          
+          // Dedicated vision models: has CLIP projector or explicit -vl / vision naming
+          const isVision = families.some(f => f.toLowerCase().includes('clip')) ||
+            nameLower.includes('-vl') ||
+            nameLower.includes(':vl') ||
+            nameLower.includes('vision') ||
+            nameLower.includes('llava') ||
+            nameLower.includes('bakllava') ||
+            nameLower.includes('minicpm-v') ||
+            nameLower.includes('moondream');
+
+          // Dedicated coding models
+          const isCode = nameLower.includes('coder') ||
+            nameLower.includes('starcoder') ||
+            nameLower.includes('deepseek-coder') ||
+            nameLower.includes('codellama') ||
+            nameLower.includes('codeqwen') ||
+            nameLower.includes('code');
+
+          // Dedicated function-only models (fine-tuned exclusively for tool execution, e.g. functiongemma)
+          const isFunction = nameLower.startsWith('function') ||
+            nameLower.includes('functiongemma') ||
+            nameLower.includes('toolbench') ||
+            nameLower.includes('gorilla-openfunctions') ||
+            nameLower.includes('nexusflow');
+
+          // Chat models: all models eligible for conversation (includes general chat, code, reasoning, creative, vision, and function models)
+          const isChat = !isDecision && !isEmbedding;
+
+          const derivedCapabilities = [...capabilities];
+          if (isChat && !derivedCapabilities.includes('completion')) derivedCapabilities.push('completion');
+          if (isEmbedding && !derivedCapabilities.includes('embedding')) derivedCapabilities.push('embedding');
+          if (isVision && !derivedCapabilities.includes('vision')) derivedCapabilities.push('vision');
+          if (isDecision && !derivedCapabilities.includes('decision')) derivedCapabilities.push('decision');
+          if (isFunction && !derivedCapabilities.includes('tools')) derivedCapabilities.push('tools');
+
+          const family = showData?.details?.family || model.details?.family || '';
+          const parameterSize = showData?.details?.parameter_size || model.details?.parameter_size || '';
+          const rawQuant = showData?.details?.quantization_level || model.details?.quantization_level || (nameLower.includes('fp16') ? 'FP16' : '');
+
+          let contextLength = model.details?.context_length || null;
+          if (!contextLength && showData?.model_info) {
+            const ctxEntry = Object.entries(showData.model_info).find(([k]) => k.includes('context_length'));
+            if (ctxEntry) contextLength = ctxEntry[1];
+          }
+
+          const runner = showData?.details?.runner || model.details?.runner || (isMlx ? 'mlx' : 'gguf');
+          const developer = this.inferDeveloper(model.name, family);
+
+          return {
+            name: model.name,
+            size: model.size,
+            digest: model.digest?.slice(0, 12),
+            modifiedAt: model.modified_at,
+            family: family || 'unknown',
+            parameterSize: parameterSize || '—',
+            quantization: rawQuant || '—',
+            contextLength,
+            contextTokensText: this.formatContextTokens(contextLength),
+            developer,
+            runner: runner ? runner.toUpperCase() : '',
+            capabilities: derivedCapabilities,
+            isDecisionModel: isDecision,
+            isChatModel: isChat,
+            isEmbeddingModel: isEmbedding,
+            isVisionModel: isVision,
+            isCodeModel: isCode,
+            isFunctionModel: isFunction,
+          };
+        })
+      );
     } catch (e) {
       console.error('Failed to list models:', e);
       return [];
